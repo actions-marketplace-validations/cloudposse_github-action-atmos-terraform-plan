@@ -1,4 +1,4 @@
-name: "Test - Changes exists - Drift"
+name: "Test - Atmos Pro Enabled"
 
 on:
   workflow_dispatch:
@@ -11,6 +11,9 @@ on:
         description: "The sha of the commit that triggered the workflow run"
         required: false
         type: "string"
+  pull_request:
+    types: [opened, synchronize, reopened]
+
 env:
   AWS_REGION: us-east-2
 
@@ -38,7 +41,7 @@ jobs:
       - shell: bash
         run: |
           mkdir -p ${{ runner.temp }}
-          cp ./tests/opentofu/atmos.yaml ${{ runner.temp }}/atmos.yaml
+          cp ./tests/terraform/atmos.yaml ${{ runner.temp }}/atmos.yaml
           sed -i -e 's#__INFRACOST_ENABLED__#false#g' ${{ runner.temp }}/atmos.yaml
           sed -i -e 's#__STORAGE_REGION__#${{ env.AWS_REGION }}#g' ${{ runner.temp }}/atmos.yaml
           sed -i -e 's#__STORAGE_BUCKET__#${{ secrets.TERRAFORM_STATE_BUCKET }}#g' ${{ runner.temp }}/atmos.yaml
@@ -48,7 +51,7 @@ jobs:
           sed -i -e 's#__PLAN_ROLE__#${{ secrets.TERRAFORM_PLAN_ROLE }}#g' ${{ runner.temp }}/atmos.yaml
           sed -i -e 's#__APPLY_ROLE__#${{ secrets.TERRAFORM_PLAN_ROLE }}#g' ${{ runner.temp }}/atmos.yaml
 
-          for file in ./tests/opentofu/stacks/catalog/*.yaml; do
+          for file in ./tests/terraform/stacks/catalog/*.yaml; do
           if [ -f "$file" ]; then
             sed -i -e "s#__INFRACOST_ENABLED__#false#g" "$file"
             sed -i -e "s#__STORAGE_REGION__#${{ env.AWS_REGION }}#g" "$file"          
@@ -60,18 +63,19 @@ jobs:
             sed -i -e "s#__APPLY_ROLE__#${{ secrets.TERRAFORM_PLAN_ROLE }}#g" "$file"
           fi
           done
+          
+          cat ${{ runner.temp }}/atmos.yaml
 
-
-      - name: Plan Atmos Component
+      - name: Plan Atmos Pro Component
         id: current
         uses: ./
         with:
-          component: "foobar/changes"
+          component: "foobar-atmos-pro"
           stack: "plat-ue2-sandbox"
           sha: ${{ github.sha }}
-          drift-detection-mode-enabled: true
           atmos-config-path: ${{ runner.temp }}
-          skip-checkout: true
+          atmos-version: ">= 1.174.0"
+          skip-checkout: false
 
     outputs:
       result: ${{ steps.current.outcome }}
@@ -86,13 +90,6 @@ jobs:
           expected: 'success'
           actual: "${{ needs.test.outputs.result }}"
 
-      - name: Download Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: metadata
-          pattern: metadata-*
-          merge-multiple: true
-
       - name: Display structure of downloaded files
         id: metadata
         run: |
@@ -102,96 +99,41 @@ jobs:
           DIR_EXISTS=$?
           echo "dir_exists=${DIR_EXISTS}" >> $GITHUB_OUTPUT
 
-          test -f ./metadata/plat-ue2-sandbox-foobar_changes.metadata.json
-          FILE_EXISTS=$?
-          echo "file_exists=${FILE_EXISTS}" >> $GITHUB_OUTPUT
-
-          test -f ./metadata/step-summary-plat-ue2-sandbox-foobar_changes.md
-          FILE_EXISTS=$?
-          echo "file_summary_md_exists=${FILE_EXISTS}" >> $GITHUB_OUTPUT
-
-          test -f ./metadata/issue-description-plat-ue2-sandbox-foobar_changes.md
-          FILE_EXISTS=$?
-          echo "file_md_exists=${FILE_EXISTS}" >> $GITHUB_OUTPUT
-          
-          echo "file_md=$(cat ./metadata/issue-description-plat-ue2-sandbox-foobar_changes.md | jq -Rs .)" >> $GITHUB_OUTPUT
-          
-          echo "file_json=$(cat ./metadata/plat-ue2-sandbox-foobar_changes.metadata.json | jq -Rs . )" >> $GITHUB_OUTPUT
-          
-          echo files_json_count=$(ls -lA ./metadata/*.json | wc -l) >> $GITHUB_OUTPUT
-
       - uses: nick-fields/assert-action@v2
         with:
           actual: "${{ steps.metadata.outputs.dir_exists }}"
-          expected: "0"
-
-      - uses: nick-fields/assert-action@v2
-        with:
-          actual: "${{ steps.metadata.outputs.file_exists }}"
-          expected: "0"
-
-      - uses: nick-fields/assert-action@v2
-        with:
-          actual: "${{ steps.metadata.outputs.file_md_exists }}"
-          expected: "0"
-
-      - uses: nick-fields/assert-action@v2
-        with:
-          actual: "${{ steps.metadata.outputs.file_summary_md_exists }}"
-          expected: "0"
-
-      - uses: nick-fields/assert-action@v2
-        with:
-          actual: "${{ fromJSON(needs.test.outputs.summary) }}"
-          expected: "${{ fromJSON(steps.metadata.outputs.file_md) }}"
-
-      - uses: nick-fields/assert-action@v2
-        with:
-          actual: "${{ steps.metadata.outputs.files_json_count }}"
           expected: "1"
 
       - uses: nick-fields/assert-action@v2
         with:
-          actual: "${{ fromJSON(steps.metadata.outputs.file_json) }}"
-          expected: |
-            { "stack": "plat-ue2-sandbox", "component": "foobar/changes", "componentPath": "tests/opentofu/components/terraform/foobar", "drifted": true, "error": false }
-
-      - uses: nick-fields/assert-action@v2
-        with:
           actual: "${{ fromJSON(needs.test.outputs.summary) }}"
           expected: |
-            ## Drift Detected for `foobar/changes` in `plat-ue2-sandbox`
-            
-            
-            
+            ## Changes Found for `foobar-atmos-pro` in `plat-ue2-sandbox`
+  
             <a href="https://cloudposse.com/"><img src="https://cloudposse.com/logo-300x69.svg" width="100px" align="right"/></a>
-            
-            [![create](https://shields.io/badge/PLAN-CREATE-success?style=for-the-badge)](#user-content-create-plat-ue2-sandbox-foobar_changes)
-            
+            [![create](https://shields.io/badge/PLAN-CREATE-success?style=for-the-badge)](#user-content-create-plat-ue2-sandbox-foobar-atmos-pro)
             
             
             
-            
-            <details><summary><a id="result-plat-ue2-sandbox-foobar_changes" />Plan: 1 to add, 0 to change, 0 to destroy.</summary>
+            <details><summary><a id="result-plat-ue2-sandbox-foobar-atmos-pro" />Plan: 1 to add, 0 to change, 0 to destroy.</summary>
             
             <br/>      
             To reproduce this locally, run:<br/><br/>
             
             ```shell
-            atmos terraform plan foobar/changes -s plat-ue2-sandbox
+            atmos terraform plan foobar-atmos-pro -s plat-ue2-sandbox
             ```
                 
             
             
                 
             ---
-            ### <a id="create-plat-ue2-sandbox-foobar_changes" />Create
+            ### <a id="create-plat-ue2-sandbox-foobar-atmos-pro" />Create
             ```diff
             + random_id.foo[0]
             ```
                 
             </details>
-            
             
             <details><summary>Terraform <strong>Plan</strong> Summary</summary>
             
@@ -211,43 +153,8 @@ jobs:
                 }
             
             Plan: 1 to add, 0 to change, 0 to destroy.
-            
-            Warning: Test warning summary
-            
-              with data.validation_warning.warn[0],
-              on main.tf line 20, in data "validation_warning" "warn":
-              20: data "validation_warning" "warn" {
-            
-            Test warning details
             ```
             
-            </details>
-                  
-            
-            
-            
-            > [!WARNING]
-            > ```
-            > Warning: Test warning summary
-            > 
-            >   with data.validation_warning.warn[0],
-            >   on main.tf line 20, in data "validation_warning" "warn":
-            >   20: data "validation_warning" "warn" {
-            > 
-            > Test warning details
-            > ```
-            
-            
-            <details><summary>Metadata</summary>
-            
-            ```json
-            {
-              "component": "foobar/changes",
-              "stack": "plat-ue2-sandbox",
-              "componentPath": "tests/opentofu/components/terraform/foobar",
-              "commitSHA": "${{ github.sha }}"
-            }
-            ```
             </details>
 
   teardown:
@@ -256,4 +163,4 @@ jobs:
     if: ${{ always() }}
     steps:
       - name: Tear down
-        run: echo "Do Tear down"
+        run: echo "Do Tear down" 
